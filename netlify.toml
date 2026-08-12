@@ -1,0 +1,26 @@
+# Netlify deploys the EventCatalog WEBSITE only.
+#
+# The three FastAPI services and RabbitMQ are NOT deployed here - Netlify hosts
+# static files, it cannot run Python containers or a message broker. Those still
+# run locally with `docker compose up`. The catalog is documentation built from
+# catalog-data/architecture.json, so it does not need the services to be running.
+
+[build]
+  # Run the build from inside the eventcatalog/ folder...
+  base = "eventcatalog"
+  # ...but the whole repo is checked out, so scripts/sync-catalog.js can still
+  # read ../catalog-data/architecture.json.
+  command = "npm run sync && npm run build"
+  # Relative to `base`, i.e. eventcatalog/dist
+  publish = "dist"
+
+[build.environment]
+  # EventCatalog 4.x needs Node 20+
+  NODE_VERSION = "22"
+
+# Static site: every page is pre-rendered, so no SPA fallback is needed.
+# Long-cache the hashed build assets.
+[[headers]]
+  for = "/_astro/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

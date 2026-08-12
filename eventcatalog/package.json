@@ -1,0 +1,17 @@
+{
+  "name": "its-rms-eventcatalog-poc-catalog",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EventCatalog site for the ITS RMS medical-camp POC. Content is generated from ../catalog-data/architecture.json.",
+  "scripts": {
+    "sync": "node scripts/sync-catalog.js",
+    "dev": "eventcatalog dev",
+    "build": "eventcatalog build",
+    "preview": "eventcatalog preview",
+    "generate": "npm run sync && npm run build"
+  },
+  "dependencies": {
+    "@eventcatalog/core": "4.6.2",
+    "@eventcatalog/sdk": "^2.27.1"
+  }
+}

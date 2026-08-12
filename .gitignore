@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node / EventCatalog
+node_modules/
+eventcatalog/dist/
+eventcatalog/.eventcatalog-core/
+eventcatalog/.astro/
+.DS_Store
+
+# Generated EventCatalog content (regenerate with: npm run sync)
+eventcatalog/domains/
+eventcatalog/services/
+eventcatalog/events/
+eventcatalog/channels/
+
+# Stray lockfile created by running `npm install` in the project root by mistake.
+# npm should only be run inside eventcatalog/. Safe to delete this file.
+/package-lock.json

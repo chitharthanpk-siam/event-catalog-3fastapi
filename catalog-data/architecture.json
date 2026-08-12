@@ -1,0 +1,455 @@
+{
+  "_readme": [
+    "This file is the SINGLE SOURCE OF TRUTH for the EventCatalog site in this POC.",
+    "It is a hand-written stand-in for what a future ITS RMS 'business module' / 'event listing'",
+    "admin form (or its database table) would produce. Nothing here is read from the running",
+    "FastAPI code - EventCatalog does not inspect Python. eventcatalog/scripts/sync-catalog.js",
+    "reads this file and writes the catalog using @eventcatalog/sdk.",
+    "All sample data shown in the examples below is FICTIONAL."
+  ],
+  "catalog": {
+    "title": "ITS RMS Event Catalog (POC)",
+    "organizationName": "ITS RMS - Proof of Concept",
+    "version": "1.0.0",
+    "broker": {
+      "type": "RabbitMQ",
+      "exchange": "its.rms.events",
+      "exchangeType": "topic",
+      "managementUi": "http://localhost:15672"
+    }
+  },
+
+  "domains": [
+    {
+      "id": "identity-and-access",
+      "name": "Identity & Access",
+      "version": "1.0.0",
+      "summary": "Combined login and role selection. One phone number may hold several roles.",
+      "owners": [],
+      "styles": { "icon": "ShieldCheckIcon", "node": { "color": "blue" } },
+      "description": [
+        "The Identity & Access domain answers one question: **who is using the system right now, and in what role?**",
+        "",
+        "In the ITS RMS medical camp world a single phone number is often several people at once:",
+        "the same volunteer may be an `Admin` for one camp and a `Data Entry` operator for another.",
+        "So login and role selection are treated as one combined step.",
+        "",
+        "### Roles in this POC",
+        "`Super Admin`, `Admin`, `Data Entry`, `Doctor`, `Patient`",
+        "",
+        "> **POC limits.** There is no password, no OTP check and no JWT signing. Users are hard-coded and fictional."
+      ]
+    },
+    {
+      "id": "camp-operations",
+      "name": "Camp Operations",
+      "version": "1.0.0",
+      "summary": "Camp configuration, patient registration and consultation slot booking.",
+      "owners": [],
+      "styles": { "icon": "BuildingOffice2Icon", "node": { "color": "green" } },
+      "description": [
+        "The Camp Operations domain owns everything that happens **before** a patient sees a doctor.",
+        "",
+        "1. An admin configures a camp: name, host city, location, start/end date, timezone and the departments offered.",
+        "2. A patient (or a Data Entry operator on their behalf) is registered against that camp.",
+        "3. A consultation slot is booked for a department, a date and a session.",
+        "",
+        "This domain is the main **publisher** in the POC: registering a patient and booking a slot are the two",
+        "facts the clinical side needs to know about.",
+        "",
+        "> **POC limits.** Storage is an in-memory dictionary and all patients and camps are fictional sample data."
+      ]
+    },
+    {
+      "id": "clinical-care",
+      "name": "Clinical Care",
+      "version": "1.0.0",
+      "summary": "Doctor consultation: vitals, diagnosis and case closure.",
+      "owners": [],
+      "styles": { "icon": "HeartIcon", "node": { "color": "pink" } },
+      "description": [
+        "The Clinical Care domain owns what happens **once the patient is in front of a doctor**.",
+        "",
+        "It never calls Camp Operations directly. It learns about patients and slots purely by",
+        "**consuming events**, which is the whole point of the POC:",
+        "",
+        "| It hears | It does |",
+        "| --- | --- |",
+        "| `PatientRegistered` | Opens a new clinical case |",
+        "| `SlotBooked` | Attaches the consultation slot to that case |",
+        "",
+        "The doctor then records vitals and a diagnosis, and closes the case.",
+        "",
+        "> **POC limits.** All clinical values are fictional. Nothing here is medical advice or a real record."
+      ]
+    }
+  ],
+
+  "services": [
+    {
+      "id": "identity-service",
+      "name": "Identity Service",
+      "version": "1.0.0",
+      "domain": "identity-and-access",
+      "port": 8001,
+      "docsUrl": "http://localhost:8001/docs",
+      "summary": "Fake login and role selection for the medical camp POC.",
+      "styles": { "icon": "KeyIcon", "node": { "color": "blue" } },
+      "repository": { "language": "Python", "url": "./identity-service" },
+      "publishes": ["UserLoggedIn"],
+      "consumes": [],
+      "endpoints": [
+        { "method": "POST", "path": "/login", "description": "Fictional phone-number login. Returns available roles and a fake session token. Publishes UserLoggedIn." },
+        { "method": "POST", "path": "/select-role", "description": "Pick one of the roles the phone number holds for this session." },
+        { "method": "GET", "path": "/demo-users", "description": "List the fictional demo logins." },
+        { "method": "GET", "path": "/health", "description": "Liveness probe used by Docker Compose." }
+      ]
+    },
+    {
+      "id": "camp-service",
+      "name": "Camp Service",
+      "version": "1.0.0",
+      "domain": "camp-operations",
+      "port": 8002,
+      "docsUrl": "http://localhost:8002/docs",
+      "summary": "Camp configuration, patient registration and slot booking.",
+      "styles": { "icon": "ClipboardDocumentListIcon", "node": { "color": "green" } },
+      "repository": { "language": "Python", "url": "./camp-service" },
+      "publishes": ["PatientRegistered", "SlotBooked"],
+      "consumes": ["UserLoggedIn"],
+      "endpoints": [
+        { "method": "GET", "path": "/camps/availability", "description": "Patient portal view of open camps." },
+        { "method": "POST", "path": "/camps", "description": "Create a camp configuration." },
+        { "method": "POST", "path": "/patients/register", "description": "Register a fictional patient. Publishes PatientRegistered." },
+        { "method": "POST", "path": "/slots/book", "description": "Book a consultation slot. Publishes SlotBooked." },
+        { "method": "GET", "path": "/login-activity", "description": "Proof that UserLoggedIn was consumed (logging only)." },
+        { "method": "GET", "path": "/health", "description": "Liveness probe used by Docker Compose." }
+      ]
+    },
+    {
+      "id": "clinical-service",
+      "name": "Clinical Service",
+      "version": "1.0.0",
+      "domain": "clinical-care",
+      "port": 8003,
+      "docsUrl": "http://localhost:8003/docs",
+      "summary": "Opens cases from events, records vitals and diagnosis, closes cases.",
+      "styles": { "icon": "HeartIcon", "node": { "color": "pink" } },
+      "repository": { "language": "Python", "url": "./clinical-service" },
+      "publishes": ["VitalsRecorded", "CaseClosed"],
+      "consumes": ["PatientRegistered", "SlotBooked"],
+      "endpoints": [
+        { "method": "GET", "path": "/cases", "description": "List cases. Cases are created by consuming PatientRegistered." },
+        { "method": "POST", "path": "/cases/{case_id}/vitals", "description": "Record vitals. Publishes VitalsRecorded." },
+        { "method": "POST", "path": "/cases/{case_id}/diagnosis", "description": "Record chief complaint, diagnosis, medication and follow-up." },
+        { "method": "POST", "path": "/cases/{case_id}/close", "description": "Close the case. Publishes CaseClosed." },
+        { "method": "GET", "path": "/health", "description": "Liveness probe used by Docker Compose." }
+      ]
+    }
+  ],
+
+  "events": [
+    {
+      "id": "UserLoggedIn",
+      "name": "User Logged In",
+      "version": "1.0.0",
+      "summary": "A fictional user signed in and their available roles were resolved.",
+      "routingKey": "user.logged-in",
+      "producedBy": "identity-service",
+      "consumedBy": [],
+      "styles": { "node": { "color": "blue" } },
+      "description": [
+        "Emitted by `identity-service` immediately after a successful (fake) login.",
+        "",
+        "`camp-service` binds a queue to this routing key **for demonstration and logging only** -",
+        "it does not change any business state when it hears this event."
+      ],
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "UserLoggedIn",
+        "type": "object",
+        "required": ["eventId", "eventType", "occurredAt", "source", "data"],
+        "properties": {
+          "eventId": { "type": "string", "format": "uuid" },
+          "eventType": { "type": "string", "const": "UserLoggedIn" },
+          "eventVersion": { "type": "string", "examples": ["1.0.0"] },
+          "occurredAt": { "type": "string", "format": "date-time" },
+          "source": { "type": "string", "const": "identity-service" },
+          "data": {
+            "type": "object",
+            "required": ["userId", "phone", "availableRoles", "sessionToken"],
+            "properties": {
+              "userId": { "type": "string", "examples": ["usr-1001"] },
+              "phone": { "type": "string", "examples": ["+919999999999"] },
+              "displayName": { "type": "string", "examples": ["Fatema Demo (fictional)"] },
+              "availableRoles": {
+                "type": "array",
+                "items": { "type": "string", "enum": ["Super Admin", "Admin", "Data Entry", "Doctor", "Patient"] }
+              },
+              "sessionToken": { "type": "string", "description": "Fake token. Not a JWT, not signed." },
+              "loggedInAt": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      },
+      "example": {
+        "eventId": "6b1f0e0a-1111-4c2f-9a0b-000000000001",
+        "eventType": "UserLoggedIn",
+        "eventVersion": "1.0.0",
+        "occurredAt": "2026-09-01T08:00:00+00:00",
+        "source": "identity-service",
+        "data": {
+          "userId": "usr-1001",
+          "phone": "+919999999999",
+          "displayName": "Fatema Demo (fictional)",
+          "availableRoles": ["Admin", "Data Entry"],
+          "sessionToken": "fake-session-ab12cd34ef56",
+          "loggedInAt": "2026-09-01T08:00:00+00:00"
+        }
+      }
+    },
+    {
+      "id": "PatientRegistered",
+      "name": "Patient Registered",
+      "version": "1.0.0",
+      "summary": "A fictional patient was registered against a camp.",
+      "routingKey": "patient.registered",
+      "producedBy": "camp-service",
+      "consumedBy": ["clinical-service"],
+      "styles": { "node": { "color": "green" } },
+      "description": [
+        "The first real business event in the flow.",
+        "",
+        "`clinical-service` consumes it and **opens a clinical case** for that patient.",
+        "That is the only way a case comes into existence in this POC - there is no",
+        "HTTP endpoint to create one."
+      ],
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PatientRegistered",
+        "type": "object",
+        "required": ["eventId", "eventType", "occurredAt", "source", "data"],
+        "properties": {
+          "eventId": { "type": "string", "format": "uuid" },
+          "eventType": { "type": "string", "const": "PatientRegistered" },
+          "eventVersion": { "type": "string", "examples": ["1.0.0"] },
+          "occurredAt": { "type": "string", "format": "date-time" },
+          "source": { "type": "string", "const": "camp-service" },
+          "data": {
+            "type": "object",
+            "required": ["patientId", "patientName", "phone", "campId", "patientType"],
+            "properties": {
+              "patientId": { "type": "string", "examples": ["PAT-0001"] },
+              "patientName": { "type": "string", "examples": ["Zainab Demo (fictional)"] },
+              "phone": { "type": "string", "examples": ["+919777777777"] },
+              "campId": { "type": "string", "examples": ["CAMP-0001"] },
+              "patientType": { "type": "string", "enum": ["ITS member", "non-ITS member"] },
+              "registeredBy": { "type": ["string", "null"], "description": "User id of the Admin / Data Entry operator" },
+              "registeredAt": { "type": "string", "format": "date-time" },
+              "sampleData": { "type": "boolean", "const": true, "description": "Always true - this POC only ever emits fictional patients." }
+            }
+          }
+        }
+      },
+      "example": {
+        "eventId": "6b1f0e0a-2222-4c2f-9a0b-000000000002",
+        "eventType": "PatientRegistered",
+        "eventVersion": "1.0.0",
+        "occurredAt": "2026-09-01T08:05:00+00:00",
+        "source": "camp-service",
+        "data": {
+          "patientId": "PAT-0001",
+          "patientName": "Zainab Demo (fictional)",
+          "phone": "+919777777777",
+          "campId": "CAMP-0001",
+          "patientType": "ITS member",
+          "registeredBy": "usr-1001",
+          "registeredAt": "2026-09-01T08:05:00+00:00",
+          "sampleData": true
+        }
+      }
+    },
+    {
+      "id": "SlotBooked",
+      "name": "Slot Booked",
+      "version": "1.0.0",
+      "summary": "A consultation slot was booked for a registered patient.",
+      "routingKey": "slot.booked",
+      "producedBy": "camp-service",
+      "consumedBy": ["clinical-service"],
+      "styles": { "node": { "color": "green" } },
+      "description": [
+        "Booking a slot tells Clinical Care **which department, day and session** the patient is expected in.",
+        "",
+        "`clinical-service` attaches the slot to the patient's open case. If the slot event somehow",
+        "arrives before the patient event, the POC parks it and attaches it as soon as the case exists."
+      ],
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "SlotBooked",
+        "type": "object",
+        "required": ["eventId", "eventType", "occurredAt", "source", "data"],
+        "properties": {
+          "eventId": { "type": "string", "format": "uuid" },
+          "eventType": { "type": "string", "const": "SlotBooked" },
+          "eventVersion": { "type": "string", "examples": ["1.0.0"] },
+          "occurredAt": { "type": "string", "format": "date-time" },
+          "source": { "type": "string", "const": "camp-service" },
+          "data": {
+            "type": "object",
+            "required": ["slotId", "patientId", "campId", "department", "date", "session"],
+            "properties": {
+              "slotId": { "type": "string", "examples": ["SLOT-0001"] },
+              "patientId": { "type": "string", "examples": ["PAT-0001"] },
+              "campId": { "type": "string", "examples": ["CAMP-0001"] },
+              "department": { "type": "string", "examples": ["General Medicine", "Dental", "Ophthalmology"] },
+              "date": { "type": "string", "format": "date", "examples": ["2026-09-02"] },
+              "session": { "type": "string", "enum": ["Morning", "Afternoon", "Evening"] },
+              "bookedAt": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      },
+      "example": {
+        "eventId": "6b1f0e0a-3333-4c2f-9a0b-000000000003",
+        "eventType": "SlotBooked",
+        "eventVersion": "1.0.0",
+        "occurredAt": "2026-09-01T08:06:00+00:00",
+        "source": "camp-service",
+        "data": {
+          "slotId": "SLOT-0001",
+          "patientId": "PAT-0001",
+          "campId": "CAMP-0001",
+          "department": "General Medicine",
+          "date": "2026-09-02",
+          "session": "Morning",
+          "bookedAt": "2026-09-01T08:06:00+00:00"
+        }
+      }
+    },
+    {
+      "id": "VitalsRecorded",
+      "name": "Vitals Recorded",
+      "version": "1.0.0",
+      "summary": "A doctor recorded temperature, blood pressure and weight on a case.",
+      "routingKey": "vitals.recorded",
+      "producedBy": "clinical-service",
+      "consumedBy": [],
+      "styles": { "node": { "color": "pink" } },
+      "description": [
+        "Published when a doctor saves vitals for an open case.",
+        "",
+        "Nothing consumes it in this POC. It is deliberately left unconsumed to show what an",
+        "**available but unused** event looks like on the catalog map - a real system would",
+        "hang analytics, alerting or a patient-history service off this."
+      ],
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "VitalsRecorded",
+        "type": "object",
+        "required": ["eventId", "eventType", "occurredAt", "source", "data"],
+        "properties": {
+          "eventId": { "type": "string", "format": "uuid" },
+          "eventType": { "type": "string", "const": "VitalsRecorded" },
+          "eventVersion": { "type": "string", "examples": ["1.0.0"] },
+          "occurredAt": { "type": "string", "format": "date-time" },
+          "source": { "type": "string", "const": "clinical-service" },
+          "data": {
+            "type": "object",
+            "required": ["caseId", "patientId", "temperature", "bloodPressure", "weight"],
+            "properties": {
+              "caseId": { "type": "string", "examples": ["CASE-0001"] },
+              "patientId": { "type": "string", "examples": ["PAT-0001"] },
+              "temperature": { "type": "number", "description": "Degrees Celsius", "examples": [37.2] },
+              "bloodPressure": { "type": "string", "examples": ["120/80"] },
+              "weight": { "type": "number", "description": "Kilograms", "examples": [68.5] },
+              "notes": { "type": ["string", "null"], "examples": ["Mild headache reported (fictional)"] },
+              "recordedBy": { "type": ["string", "null"], "examples": ["usr-1002"] },
+              "recordedAt": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      },
+      "example": {
+        "eventId": "6b1f0e0a-4444-4c2f-9a0b-000000000004",
+        "eventType": "VitalsRecorded",
+        "eventVersion": "1.0.0",
+        "occurredAt": "2026-09-02T09:15:00+00:00",
+        "source": "clinical-service",
+        "data": {
+          "caseId": "CASE-0001",
+          "patientId": "PAT-0001",
+          "temperature": 37.2,
+          "bloodPressure": "120/80",
+          "weight": 68.5,
+          "notes": "Mild headache reported (fictional)",
+          "recordedBy": "usr-1002",
+          "recordedAt": "2026-09-02T09:15:00+00:00"
+        }
+      }
+    },
+    {
+      "id": "CaseClosed",
+      "name": "Case Closed",
+      "version": "1.0.0",
+      "summary": "The consultation finished and the clinical case was closed.",
+      "routingKey": "case.closed",
+      "producedBy": "clinical-service",
+      "consumedBy": [],
+      "styles": { "node": { "color": "pink" } },
+      "description": [
+        "The last event in the POC flow. Carries the diagnosis summary so downstream systems",
+        "would not need to call back into Clinical Care.",
+        "",
+        "Nothing consumes it here. In a real ITS RMS this is where reporting, follow-up",
+        "reminders or pharmacy would plug in."
+      ],
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "CaseClosed",
+        "type": "object",
+        "required": ["eventId", "eventType", "occurredAt", "source", "data"],
+        "properties": {
+          "eventId": { "type": "string", "format": "uuid" },
+          "eventType": { "type": "string", "const": "CaseClosed" },
+          "eventVersion": { "type": "string", "examples": ["1.0.0"] },
+          "occurredAt": { "type": "string", "format": "date-time" },
+          "source": { "type": "string", "const": "clinical-service" },
+          "data": {
+            "type": "object",
+            "required": ["caseId", "patientId", "closedAt"],
+            "properties": {
+              "caseId": { "type": "string", "examples": ["CASE-0001"] },
+              "patientId": { "type": "string", "examples": ["PAT-0001"] },
+              "campId": { "type": "string", "examples": ["CAMP-0001"] },
+              "chiefComplaint": { "type": ["string", "null"], "examples": ["Headache and fatigue for 3 days (fictional)"] },
+              "diagnosis": { "type": ["string", "null"], "examples": ["Tension headache (fictional)"] },
+              "medication": { "type": ["string", "null"], "examples": ["Paracetamol 500mg twice daily (fictional)"] },
+              "followUpDate": { "type": ["string", "null"], "format": "date", "examples": ["2026-09-15"] },
+              "closedBy": { "type": ["string", "null"], "examples": ["usr-1002"] },
+              "closedAt": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      },
+      "example": {
+        "eventId": "6b1f0e0a-5555-4c2f-9a0b-000000000005",
+        "eventType": "CaseClosed",
+        "eventVersion": "1.0.0",
+        "occurredAt": "2026-09-02T09:40:00+00:00",
+        "source": "clinical-service",
+        "data": {
+          "caseId": "CASE-0001",
+          "patientId": "PAT-0001",
+          "campId": "CAMP-0001",
+          "chiefComplaint": "Headache and fatigue for 3 days (fictional)",
+          "diagnosis": "Tension headache (fictional)",
+          "medication": "Paracetamol 500mg twice daily (fictional)",
+          "followUpDate": "2026-09-15",
+          "closedBy": "usr-1002",
+          "closedAt": "2026-09-02T09:40:00+00:00"
+        }
+      }
+    }
+  ]
+}
